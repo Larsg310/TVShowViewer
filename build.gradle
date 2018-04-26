@@ -1,0 +1,18 @@
+version '1.0-SNAPSHOT'
+
+apply plugin: 'java'
+
+sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+    jcenter()
+}
+
+dependencies {
+    testCompile 'junit:junit:4.12'
+    compile 'com.uwetrottmann.trakt5:trakt-java:5.8.1'
+    compile 'com.google.code.gson:gson:2.7'
+    compile 'com.github.atomashpolskiy:bt-core:1.7'
+}
+
