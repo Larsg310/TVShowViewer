@@ -1,5 +1,9 @@
 package nl.larsgerrits.tvshows;
 
+import bt.Bt;
+import bt.data.Storage;
+import bt.runtime.BtClient;
+import bt.runtime.Config;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.uwetrottmann.trakt5.TraktV2;
@@ -34,7 +38,7 @@ public class Main
     
     public static final Pattern SHOW_PATTERN = Pattern.compile("([^\\s]+)_season_(0?[0-9]|[0-9][1-9])");
     
-    public static void main(String[] args) throws IOException, Throwable
+    public static void main(String[] args) throws IOException
     {
         File[] directories = DIRECTORY.listFiles(File::isDirectory);
         
@@ -49,7 +53,7 @@ public class Main
                     if (!content.isEmpty())
                     {
                         SeasonInfo seasonInfo = GSON.fromJson(content, SeasonInfo.class);
-                        if (!seasonInfo.isComplete()) fixSeasonMetadata(seasonInfo, dir);
+                        fixSeasonMetadata(seasonInfo, dir);
                         
                         // File[] episodeFiles = dir.listFiles(f -> f.getName().startsWith("episode_"));
                         //
@@ -84,6 +88,7 @@ public class Main
                         ShowInfo showInfo = APIFetchV2.getShowInfo(seasonInfo.getImdbId());
                         for (Episode episode : seasonInfo.getEpisodes())
                         {
+                            boolean downloaded = false;
                             if (episode.getFileName().isEmpty())
                             {
                                 Optional<EpisodeModel> optionalEpisode = showInfo.getEpisodes()//
@@ -99,27 +104,27 @@ public class Main
                                     String magnetURL = model.getTorrents().get(model.getTorrents().size() - 1).getUrl();
                                     System.out.println(showInfo.getTitle() + " " + model.getSeason() + "x" + String.format("%02d", episode.getEpisode()) + ": " + magnetURL);
                                     
-                                    // String fileName = "episode_" + String.format("%02d", model.getEpisode()) + "_" + fixFileName(model.getTitle()) + ".mkv";
-                                    // Storage storage = new TVShowFileSystemStorage(dir.toPath(), fileName);
-                                    // Config config = new Config()
-                                    // {
-                                    //     @Override
-                                    //     public int getNumOfHashingThreads()
-                                    //     {
-                                    //         return Runtime.getRuntime().availableProcessors() * 2;
-                                    //     }
-                                    //
-                                    // };
-                                    // BtClient client = Bt.client().magnet(magnetURL).storage(storage).autoLoadModules().config(config).stopWhenDownloaded().build();
-                                    //
-                                    // client.startAsync(state -> {
-                                    //     double progress = (state.getPiecesComplete() * 100D / state.getPiecesTotal());
-                                    //     System.out.println(String.format("Progress: %.2f", progress).replace(',', '.') + "%");
-                                    //     if (state.getPiecesRemaining() == 0) client.stop();
-                                    // }, 1000).join();
-                                    // fixSeasonMetadata(seasonInfo, dir);
+                                    String fileName = "episode_" + String.format("%02d", model.getEpisode()) + "_" + fixFileName(model.getTitle()) + ".mkv";
+                                    Storage storage = new TVShowFileSystemStorage(dir.toPath(), fileName);
+                                    Config config = new Config()
+                                    {
+                                        @Override
+                                        public int getNumOfHashingThreads()
+                                        {
+                                            return Runtime.getRuntime().availableProcessors() * 2;
+                                        }
+
+                                    };
+                                    BtClient client = Bt.client().magnet(magnetURL).storage(storage).autoLoadModules().config(config).stopWhenDownloaded().build();
+
+                                    downloaded = true;
+                                    client.startAsync(state -> {
+                                        double progress = (state.getPiecesComplete() * 100D / state.getPiecesTotal());
+                                        System.out.println(String.format("Progress: %.2f", progress).replace(',', '.') + "%");
+                                        if (state.getPiecesRemaining() == 0) client.stop();
+                                    }, 1000).join();
                                 }
-                                
+                                if (downloaded) fixSeasonMetadata(seasonInfo, dir);
                             }
                         }
                         addSeasonToShow(seasonInfo);
