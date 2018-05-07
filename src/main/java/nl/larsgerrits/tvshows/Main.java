@@ -1,10 +1,5 @@
 package nl.larsgerrits.tvshows;
 
-import bt.Bt;
-import bt.data.Storage;
-import bt.data.file.FileSystemStorage;
-import bt.runtime.BtClient;
-import bt.runtime.Config;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.uwetrottmann.trakt5.TraktV2;
@@ -55,7 +50,6 @@ public class Main
                     {
                         SeasonInfo seasonInfo = GSON.fromJson(content, SeasonInfo.class);
                         if (!seasonInfo.isComplete()) fixSeasonMetadata(seasonInfo, dir);
-                        addSeasonToShow(seasonInfo);
                         
                         // File[] episodeFiles = dir.listFiles(f -> f.getName().startsWith("episode_"));
                         //
@@ -92,35 +86,44 @@ public class Main
                         {
                             if (episode.getFileName().isEmpty())
                             {
-                                Optional<EpisodeModel> optionalEpisode = showInfo.getEpisodes().stream().filter(e -> e.getSeason() == seasonInfo.getSeason()).filter(e -> e.getEpisode() == episode.getEpisode()).findFirst();
+                                Optional<EpisodeModel> optionalEpisode = showInfo.getEpisodes()//
+                                                                                 .stream()//
+                                                                                 .filter(e -> e.getSeason() == seasonInfo.getSeason())//
+                                                                                 .filter(e -> e.getEpisode() == episode.getEpisode())//
+                                                                                 .findFirst();//
                                 
                                 if (optionalEpisode.isPresent())
                                 {
                                     EpisodeModel model = optionalEpisode.get();
                                     
                                     String magnetURL = model.getTorrents().get(model.getTorrents().size() - 1).getUrl();
-                                    System.out.println(showInfo.getTitle() + " " + model.getSeason() + "x" + episode.getEpisode() + ": " + magnetURL);
+                                    System.out.println(showInfo.getTitle() + " " + model.getSeason() + "x" + String.format("%02d", episode.getEpisode()) + ": " + magnetURL);
                                     
-                                    Storage storage = new FileSystemStorage(dir.toPath());
-                                    Config config = new Config()
-                                    {
-                                        @Override
-                                        public int getNumOfHashingThreads()
-                                        {
-                                            return Runtime.getRuntime().availableProcessors() * 2;
-                                        }
-                                    };
-                                    BtClient client = Bt.client().magnet(magnetURL).storage(storage).autoLoadModules().stopWhenDownloaded().build();
-                                    
-                                    Object obj = client.startAsync(state -> {
-                                        System.out.println("Progress: " + (state.getPiecesComplete() * 100D / state.getPiecesTotal()));
-                                        if(state.getPiecesRemaining() == 0) client.stop();
-                                    }, 1000).join();
-                                    System.out.println(obj);
+                                    // String fileName = "episode_" + String.format("%02d", model.getEpisode()) + "_" + fixFileName(model.getTitle()) + ".mkv";
+                                    // Storage storage = new TVShowFileSystemStorage(dir.toPath(), fileName);
+                                    // Config config = new Config()
+                                    // {
+                                    //     @Override
+                                    //     public int getNumOfHashingThreads()
+                                    //     {
+                                    //         return Runtime.getRuntime().availableProcessors() * 2;
+                                    //     }
+                                    //
+                                    // };
+                                    // BtClient client = Bt.client().magnet(magnetURL).storage(storage).autoLoadModules().config(config).stopWhenDownloaded().build();
+                                    //
+                                    // client.startAsync(state -> {
+                                    //     double progress = (state.getPiecesComplete() * 100D / state.getPiecesTotal());
+                                    //     System.out.println(String.format("Progress: %.2f", progress).replace(',', '.') + "%");
+                                    //     if (state.getPiecesRemaining() == 0) client.stop();
+                                    // }, 1000).join();
+                                    // fixSeasonMetadata(seasonInfo, dir);
                                 }
                                 
                             }
                         }
+                        addSeasonToShow(seasonInfo);
+                        
                         // Response<Show> response = traktShows.summary(showName.replace('_', '-'), Extended.FULL).execute();
                         //
                         // if (response.isSuccessful())
@@ -147,6 +150,7 @@ public class Main
                         //         e.printStackTrace();
                         //     }
                         // }
+                        
                     }
                 }
                 // File[] episodes = dir.listFiles(f -> !f.getName().endsWith(".json") && !f.getName().equals("desktopini"));
@@ -205,9 +209,10 @@ public class Main
         
     }
     
-    private static String fixFileName(String filename)
+    public static String fixFileName(String filename)
     {
         return filename.toLowerCase()//
+                       .replace(' ', '_')//
                        .replace('-', '_')//
                        .replaceAll("[^a-zA-Z_\\d]+", "")//
                        .replace("__", "_");
