@@ -24,7 +24,7 @@ public class EpisodeDeserializer implements JsonDeserializer<EpisodeModel>
         int season = obj.get("season").getAsInt();
         int episode = obj.get("episode").getAsInt();
         String title = obj.get("title").getAsString();
-        String overview = obj.get("overview").getAsString();
+        String overview = obj.get("overview").isJsonNull() ? "" : obj.get("overview").getAsString();
         boolean date_based = obj.get("date_based").getAsBoolean();
         int first_aired = obj.get("first_aired").getAsInt();
         List<Torrent> torrents = new ArrayList<>();

@@ -14,5 +14,12 @@ dependencies {
     compile 'com.uwetrottmann.trakt5:trakt-java:5.8.1'
     compile 'com.google.code.gson:gson:2.7'
     compile 'com.github.atomashpolskiy:bt-core:1.7'
+    compile 'info.movito:themoviedbapi:1.7'
+    compile 'org.slf4j:slf4j-nop:1.7.21'
 }
 
+jar {
+    manifest {
+        attributes('Class-Path': configurations.compile.collect{it.toURI().toString()}.join(' '), 'Main-Class': 'nl.larsgerrits.tvshows.Main')
+    }
+}

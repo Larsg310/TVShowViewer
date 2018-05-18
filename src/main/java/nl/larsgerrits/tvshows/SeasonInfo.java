@@ -36,6 +36,11 @@ public class SeasonInfo
         return "SeasonInfo{" + "title='" + title + '\'' + ", imdbId='" + imdbId + '\'' + ", season=" + season + ", episodes=" + episodes + '}';
     }
     
+    public void setTitle(String title)
+    {
+        this.title = title;
+    }
+    
     public void setEpisodes(List<Episode> episodes)
     {
         this.episodes = episodes;
@@ -43,8 +48,18 @@ public class SeasonInfo
     
     public boolean isComplete()
     {
-        if(episodes == null) return false;
-        for(Episode episode : episodes) if(episode.getFileName().isEmpty()) return false;
+        if (episodes == null) return false;
+        for (Episode episode : episodes) if (episode.getFileName().isEmpty()) return false;
         return !title.isEmpty() && !imdbId.isEmpty() && season > 0;
+    }
+    
+    public SeasonInfo()
+    {
+    }
+    
+    public SeasonInfo(String imdbId, int season)
+    {
+        this.imdbId = imdbId;
+        this.season = season;
     }
 }
