@@ -49,63 +49,74 @@ public class CommandUpdate extends Command
     private void updateShow(File dir, SeasonInfo seasonInfo)
     {
         ShowInfo showInfo = APIFetchV2.getShowInfo(seasonInfo.getImdbId());
+        
         for (Episode episode : seasonInfo.getEpisodes())
         {
             AtomicBoolean downloaded = new AtomicBoolean(false);
             if (episode.getFileName().isEmpty() && !episode.getTitle().isEmpty())
             {
                 System.out.println("\tEpisode " + String.format("%02d", episode.getEpisode()) + " not found, checking for download...");
-                Optional<EpisodeModel> optionalEpisode = showInfo.getEpisodes().stream().filter(e -> e.getSeason() == seasonInfo.getSeason()).filter(e -> e.getEpisode() == episode.getEpisode()).findFirst();
-                
-                if (optionalEpisode.isPresent())
+                if (showInfo != null)
                 {
-                    EpisodeModel model = optionalEpisode.get();
-                    int index = model.getTorrents().size() - 1;
-                    while (!downloaded.get() && index >= 0)
+                    Optional<EpisodeModel> optionalEpisode = showInfo.getEpisodes().stream().filter(e -> e.getSeason() == seasonInfo.getSeason()).filter(e -> e.getEpisode() == episode.getEpisode()).findFirst();
+                    
+                    if (optionalEpisode.isPresent())
                     {
-                        String magnetURL = model.getTorrents().get(index).getUrl();
-                        
-                        System.out.println("\tDownload found, starting download...");
-                        
-                        String fileName = "episode_" + String.format("%02d", model.getEpisode()) + "_" + FileUtils.fixFileName(model.getTitle()) + ".mkv";
-                        Storage storage = new TVShowFileSystemStorage(dir.toPath(), fileName);
-                        Config config = new Config()
+                        EpisodeModel model = optionalEpisode.get();
+                        int index = model.getTorrents().size() - 1;
+                        while (!downloaded.get() && index >= 0)
                         {
-                            @Override
-                            public int getNumOfHashingThreads()
-                            {
-                                return Runtime.getRuntime().availableProcessors() * 2;
-                            }
+                            String magnetURL = model.getTorrents().get(index).getUrl();
                             
-                        };
-                        BtClient client = Bt.client().magnet(magnetURL).storage(storage).autoLoadModules().config(config).stopWhenDownloaded().build();
-                        
-                        AtomicInteger counter = new AtomicInteger();
-                        AtomicDouble prevCompleted = new AtomicDouble(-1);
-                        client.startAsync(state -> {
-                            if (prevCompleted.get() != state.getPiecesComplete())
+                            System.out.println("\tDownload found, starting download...");
+                            
+                            String fileName = "episode_" + String.format("%02d", model.getEpisode()) + "_" + FileUtils.fixFileName(model.getTitle()) + ".mkv";
+                            Storage storage = new TVShowFileSystemStorage(dir.toPath(), fileName);
+                            Config config = new Config()
                             {
-                                System.out.println(String.format("\t\tProgress: %.2f", state.getPiecesComplete() * 100D / state.getPiecesTotal()).replace(',', '.') + "% (" + state.getPiecesComplete() + "/" + state.getPiecesTotal() + ")");
-                                counter.set(0);
-                                prevCompleted.set(state.getPiecesComplete());
+                                @Override
+                                public int getNumOfHashingThreads()
+                                {
+                                    return Runtime.getRuntime().availableProcessors() * 2;
+                                }
+                                
+                            };
+                            BtClient client = Bt.client().magnet(magnetURL).storage(storage).autoLoadModules().config(config).stopWhenDownloaded().build();
+                            
+                            AtomicInteger counter = new AtomicInteger();
+                            AtomicDouble prevCompleted = new AtomicDouble(-1);
+                            try
+                            {
+                                client.startAsync(state -> {
+                                    if (prevCompleted.get() != state.getPiecesComplete())
+                                    {
+                                        System.out.println(String.format("\t\tProgress: %.2f", state.getPiecesComplete() * 100D / state.getPiecesTotal()).replace(',', '.') + "% (" + state.getPiecesComplete() + "/" + state.getPiecesTotal() + ")");
+                                        counter.set(0);
+                                        prevCompleted.set(state.getPiecesComplete());
+                                    }
+                                    if (counter.get() > 60) client.stop();
+                                    counter.getAndIncrement();
+                                    if (state.getPiecesRemaining() == 0)
+                                    {
+                                        downloaded.set(true);
+                                        client.stop();
+                                    }
+                                }, 1000).join();
                             }
-                            if (counter.get() > 60) client.stop();
-                            counter.getAndIncrement();
-                            if (state.getPiecesRemaining() == 0) {
-                                downloaded.set(true);
-                                client.stop();
+                            catch (Exception e)
+                            {
+                                continue;
                             }
-                        }, 1000).join();
-                        index--;
+                            index--;
+                        }
                     }
-                }
-                if (downloaded.get())
-                {
-                    FileUtils.fixSeasonMetadata(seasonInfo, dir);
-                    updatedAny = true;
+                    if (downloaded.get())
+                    {
+                        FileUtils.fixSeasonMetadata(seasonInfo, dir);
+                        updatedAny = true;
+                    }
                 }
             }
         }
-        
     }
 }
