@@ -32,16 +32,25 @@ public class CommandCreate extends Command
                 {
                     while (season <= 0)
                     {
-                        System.out.print("Which season? (1-" + serie.getNumberOfSeasons() + "): ");
+                        System.out.print("Which season? (1-" + serie.getNumberOfSeasons() + ", all): ");
                         String seasonAnswer = scanner.nextLine();
                         if (seasonAnswer.matches("\\d+"))
                         {
                             season = Integer.parseInt(seasonAnswer);
                             if (season > serie.getNumberOfSeasons()) season = 0;
                         }
+                        else if (seasonAnswer.equalsIgnoreCase("all"))
+                        {
+                            season = serie.getNumberOfSeasons();
+                            for (int i = 0; i < season; i++)
+                            {
+                                FileUtils.writeNewSeasonInfo(imdbId, i + 1, serie.getName());
+                            }
+                        }
                     }
                 }
                 FileUtils.writeNewSeasonInfo(imdbId, season, serie.getName());
+                return;
             }
         }
     }

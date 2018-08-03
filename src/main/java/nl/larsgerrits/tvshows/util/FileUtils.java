@@ -6,8 +6,9 @@ import com.uwetrottmann.trakt5.TraktV2;
 import com.uwetrottmann.trakt5.entities.Episode;
 import com.uwetrottmann.trakt5.entities.Show;
 import com.uwetrottmann.trakt5.enums.Extended;
-import javafx.util.Pair;
 import nl.larsgerrits.tvshows.SeasonInfo;
+import org.apache.commons.lang3.tuple.Pair;
+import org.threeten.bp.ZoneOffset;
 import retrofit2.Response;
 
 import java.io.File;
@@ -15,6 +16,8 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.text.Normalizer;
+import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.function.Function;
 import java.util.regex.Matcher;
@@ -30,10 +33,11 @@ public class FileUtils
     
     public static final Function<String, String> SEASON_INFO_PATH = (t) -> DIRECTORY + File.separator + t + File.separator + SEASON_INFO_NAME;
     public static final Pattern SHOW_PATTERN = Pattern.compile("([^\\s]+)_season_(0?[0-9]|[0-9][1-9])");
+    public static final Pattern DIACRITICS_AND_FRIENDS = Pattern.compile("[\\p{InCombiningDiacriticalMarks}\\p{IsLm}\\p{IsSk}]+");
     
     public static List<Pair<File, SeasonInfo>> getAllSeasonInfo()
     {
-        List<Pair<File, SeasonInfo>> seasonInfos = new ArrayList<>();
+        List<Pair<File, SeasonInfo>> seasonInfoList = new ArrayList<>();
         
         File[] directories = DIRECTORY.listFiles(File::isDirectory);
         
@@ -51,7 +55,7 @@ public class FileUtils
                         {
                             SeasonInfo seasonInfo = GSON.fromJson(content, SeasonInfo.class);
                             fixSeasonMetadata(seasonInfo, dir);
-                            seasonInfos.add(new Pair<>(dir, seasonInfo));
+                            seasonInfoList.add(Pair.of(dir, seasonInfo));
                         }
                     }
                     catch (IOException e)
@@ -61,14 +65,17 @@ public class FileUtils
                 }
             }
         }
-        return seasonInfos;
+        return seasonInfoList;
     }
     
+    @SuppressWarnings("ResultOfMethodCallIgnored")
     public static void fixSeasonMetadata(SeasonInfo info, File dir)
     {
         try
         {
-            Response<List<Episode>> response = TRAKT_TV.seasons().season(info.getImdbId(), info.getSeason(), Extended.EPISODES).execute();
+            Map<Integer, File> toRename = new HashMap<>();
+            
+            Response<List<Episode>> response = TRAKT_TV.seasons().season(info.getImdbId(), info.getSeason(), Extended.FULLEPISODES).execute();
             
             if (response.isSuccessful())
             {
@@ -78,7 +85,14 @@ public class FileUtils
                 assert episodeFiles != null;
                 for (File f : episodeFiles)
                 {
-                    int number = Integer.parseInt(f.getName().split("_")[1]);
+                    String[] details = f.getName().replace(".mkv", "").split("_");
+                    int number = Integer.parseInt(details[1]);
+                    // System.out.println(Arrays.toString(details));
+                    if (details.length == 2)
+                    {
+                        // System.out.println(f.getPath().replace(".mkv", ""));
+                        toRename.put(number, f);
+                    }
                     map.put(number, f.getName());
                 }
                 
@@ -91,7 +105,16 @@ public class FileUtils
                         nl.larsgerrits.tvshows.Episode ep = new nl.larsgerrits.tvshows.Episode();
                         ep.setEpisode(episode.number);
                         ep.setTitle(episode.title);
+                        ep.setReleaseDate(episode.first_aired.withOffsetSameInstant(ZoneOffset.of(OffsetDateTime.now().getOffset().toString())));
                         if (map.containsKey(episode.number)) ep.setFileName(map.get(episode.number));
+                        if (toRename.keySet().contains(episode.number))
+                        {
+                            String fileName = "episode_" + String.format("%02d", episode.number) + "_" + FileUtils.fixFileName(episode.title) + ".mkv";
+                            ep.setFileName(fileName);
+                            File f = toRename.get(episode.number);
+                            String newPath = f.getParent() + "\\" + fileName;
+                            f.renameTo(new File(newPath));
+                        }
                         episodes.add(ep);
                     }
                 }
@@ -120,11 +143,18 @@ public class FileUtils
     
     public static String fixFileName(String filename)
     {
-        return filename.toLowerCase()//
-                       .replace(' ', '_')//
-                       .replace('-', '_')//
-                       .replaceAll("[^a-zA-Z_\\d]+", "")//
-                       .replaceAll("_{2,}", "_");
+        return stripDiacritics(filename.toLowerCase())//
+                                                      .replace(' ', '_')//
+                                                      .replace('-', '_')//
+                                                      .replaceAll("[^a-zA-Z_\\d]+", "")//
+                                                      .replaceAll("_{2,}", "_");
+    }
+    
+    private static String stripDiacritics(String str)
+    {
+        str = Normalizer.normalize(str, Normalizer.Form.NFD);
+        str = DIACRITICS_AND_FRIENDS.matcher(str).replaceAll("");
+        return str;
     }
     
     @SuppressWarnings("ResultOfMethodCallIgnored")

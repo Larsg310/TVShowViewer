@@ -5,7 +5,6 @@ import bt.data.Storage;
 import bt.runtime.BtClient;
 import bt.runtime.Config;
 import com.google.common.util.concurrent.AtomicDouble;
-import javafx.util.Pair;
 import nl.larsgerrits.tvshows.Episode;
 import nl.larsgerrits.tvshows.SeasonInfo;
 import nl.larsgerrits.tvshows.TVShowFileSystemStorage;
@@ -13,6 +12,8 @@ import nl.larsgerrits.tvshows.apifetchv2.APIFetchV2;
 import nl.larsgerrits.tvshows.apifetchv2.models.EpisodeModel;
 import nl.larsgerrits.tvshows.apifetchv2.models.ShowInfo;
 import nl.larsgerrits.tvshows.util.FileUtils;
+import org.apache.commons.lang3.tuple.Pair;
+import org.threeten.bp.OffsetDateTime;
 
 import java.io.File;
 import java.util.List;
@@ -29,17 +30,19 @@ public class CommandUpdate extends Command
     {
         if (args == null || args[0].equals("all")) updateAllShows();
         else updateShow(args[0]);
+        if (!updatedAny) System.out.println("All shows are up-to-date!");
     }
     
     private void updateAllShows()
     {
+        System.out.println("Checking all shows...");
         List<Pair<File, SeasonInfo>> seasonInfos = FileUtils.getAllSeasonInfo();
-        for (Pair<File, SeasonInfo> pair : seasonInfos)
+        for (int i = 0; i < seasonInfos.size(); i++)
         {
-            System.out.println("Checking show \"" + pair.getValue().getTitle() + "\", season " + pair.getValue().getSeason());
+            Pair<File, SeasonInfo> pair = seasonInfos.get(i);
+            System.out.println("[" + (i + 1) + "/" + seasonInfos.size() + "] Checking \"" + pair.getValue().getTitle() + "\" season " + pair.getValue().getSeason() + "...");
             updateShow(pair.getKey(), pair.getValue());
         }
-        if (!updatedAny) System.out.println("All shows are up-to-date!");
     }
     
     private void updateShow(String showName)
@@ -67,8 +70,10 @@ public class CommandUpdate extends Command
                         while (!downloaded.get() && index >= 0)
                         {
                             String magnetURL = model.getTorrents().get(index).getUrl();
+                            int peers = model.getTorrents().get(index).getPeers();
+                            int seeds = model.getTorrents().get(index).getSeeds();
                             
-                            System.out.println("\tDownload found, starting download...");
+                            System.out.println("\tDownload found, starting download... [" + peers + "/" + seeds + "]");
                             
                             String fileName = "episode_" + String.format("%02d", model.getEpisode()) + "_" + FileUtils.fixFileName(model.getTitle()) + ".mkv";
                             Storage storage = new TVShowFileSystemStorage(dir.toPath(), fileName);
@@ -85,29 +90,52 @@ public class CommandUpdate extends Command
                             
                             AtomicInteger counter = new AtomicInteger();
                             AtomicDouble prevCompleted = new AtomicDouble(-1);
-                            try
-                            {
-                                client.startAsync(state -> {
-                                    if (prevCompleted.get() != state.getPiecesComplete())
-                                    {
-                                        System.out.println(String.format("\t\tProgress: %.2f", state.getPiecesComplete() * 100D / state.getPiecesTotal()).replace(',', '.') + "% (" + state.getPiecesComplete() + "/" + state.getPiecesTotal() + ")");
-                                        counter.set(0);
-                                        prevCompleted.set(state.getPiecesComplete());
-                                    }
-                                    if (counter.get() > 60) client.stop();
-                                    counter.getAndIncrement();
-                                    if (state.getPiecesRemaining() == 0)
+                            Thread thread = new Thread(() -> client.startAsync(state -> {
+                                if (prevCompleted.get() != state.getPiecesComplete())
+                                {
+                                    String percentage = String.format("\t\tProgress: %.2f", state.getPiecesComplete() * 100D / state.getPiecesTotal()).replace(',', '.');
+                                    System.out.println(percentage + "% (" + state.getPiecesComplete() + "/" + state.getPiecesTotal() + ")");
+                                    counter.set(0);
+                                    prevCompleted.set(state.getPiecesComplete());
+                                }
+                                if (counter.get() > 60)
+                                {
+                                    String text = "Timeout!";
+                                    if (state.getPiecesRemaining() <= 1)
                                     {
                                         downloaded.set(true);
-                                        client.stop();
+                                        text = "Finished downloading!";
                                     }
-                                }, 1000).join();
-                            }
-                            catch (Exception e)
+                                    System.out.println(text);
+                                    client.stop();
+                                }
+                                counter.getAndIncrement();
+                                if (state.getPiecesRemaining() == 0)
+                                {
+                                    downloaded.set(true);
+                                    System.out.println("Finished downloading!");
+                                    client.stop();
+                                }
+                            }, 1000).join());
+                            thread.start();
+                            try
                             {
-                                continue;
+                                thread.join();
+                            }
+                            catch (InterruptedException ignored)
+                            {
+                            
                             }
                             index--;
+                        }
+                    }
+                    else
+                    {
+                        OffsetDateTime rd = episode.getReleaseDate();
+                        if (rd != null)
+                        {
+                            int hour = rd.getHour();
+                            System.out.println(String.format("\t\tDownload not found, episode releases %02d/%02d/%04d @ %02d:00 local time", rd.getDayOfMonth(), rd.getMonthValue(), rd.getYear(), hour));
                         }
                     }
                     if (downloaded.get())

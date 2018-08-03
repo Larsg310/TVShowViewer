@@ -10,6 +10,12 @@ public class Main
     public static void main(String[] args)
     {
         disableWarning();
+        // System.setErr(new PrintStream(new OutputStream()
+        // {
+        //     public void write(int b)
+        //     {
+        //     }
+        // }));
         CommandParser.parse(args);
         System.exit(0);
     }

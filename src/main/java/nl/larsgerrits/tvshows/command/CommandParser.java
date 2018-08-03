@@ -9,12 +9,14 @@ public final class CommandParser
     public static final Command INFO = new CommandInfo();
     public static final Command UPDATE = new CommandUpdate();
     public static final Command CREATE = new CommandCreate();
+    public static final Command WATCH = new CommandWatch();
     
     static
     {
         addCommand(INFO, "info");
         addCommand(UPDATE, "update");
         addCommand(CREATE, "create");
+        addCommand(WATCH, "watch");
     }
     
     @SuppressWarnings("unchecked")
